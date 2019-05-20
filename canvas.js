@@ -1,222 +1,266 @@
 let canvas = document.querySelector('canvas');
 let ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth; // update for responsivnes
-canvas.height = window.innerHeight; // update for responsivnes
+canvas.width = window.innerWidth; // TODO: responsivnes
+canvas.height = window.innerHeight; // TODO: responsivnes
+const BOARD_COLS = 7;
+const BOARD_ROWS = 6;
+const BOARD_COLOR = 'blue';
+const SEQUENCE_COLOR = 'white';
+const GAME_STATUSES = {playing: 0, win: 1, tie: 2};
+const PLAYERS = [
+    {name: 'RED', color: 'red'},
+    {name: 'YELLOW', color: '#FD0'},
+];
+const NEARBY_CELL_DIRECTIONS = {
+    above: {x:0, y:1},
+    aboveRight: {x:1, y:1},
+    right: {x:1, y:0},
+    belowRight: {x:1, y:-1},
+    below: {x:0, y:-1},
+    belowLeft: {x:-1, y:-1},
+    left: {x:-1, y:0},
+    aboveLeft: {x:-1, y:1},
+}; // represents index steps to the cell's neighbor.
+const SLOT_DIMENSION = Math.floor(Math.min(canvas.width / BOARD_COLS, canvas.height / BOARD_ROWS));
 
-
-function Board() { // the board of the game has the board's state and other info.
-    this.boardColumns = 7; // CAN'T WORK!!!!!@@@
-    this.boardRows = 6; // CAN'T WORK!!!!!@@@
-    this.state = createEmptyBoard(this.boardColumns);
-    this.lastMoveCol;
-    this.movesNumber = 0;
-    this.playerColors = ['red', '#FD0'];
-    this.color = 'blue';
-    this.fourRowColor = 'white';
-    this.isWinner = false;
-    this.isTie = false;
-    this.currentPlayer = this.playerColors[0];
-    this.slotDim = Math.floor(Math.min(canvas.width / this.boardColumns, canvas.height / this.boardRows));
-
-
-    function createEmptyBoard(boardColumns) { // Create 7col x 6row board. ( array[col][row] ). Return board.
-        let board = new Array(boardColumns);
-        for (let i=0 ; i < board.length ; i++) {
-            board[i] = [];
+// The Game class has the info about the game and his state.
+// discsState is represents the discs placements on the board.  
+class Game {
+    constructor() {
+        this.discsState = this.createEmptyState();
+        this.lastMoveCol;
+        this.movesNumber = 0;
+        this.gameStatus = GAME_STATUSES.playing;
+        this.currentPlayer = PLAYERS[0];
+        
+        
+    }
+    
+    // Return's new disc state.
+    createEmptyState() {
+        let discsState = new Array(BOARD_COLS);
+        for (let col=0 ; col < discsState.length ; col++) {
+            discsState[col] = [];
         }
-        return board;
+        return discsState;
     }
 
-    this.switchCurrentPlayer = function() {
-        if(this.currentPlayer === this.playerColors[0]) {
-            this.currentPlayer = this.playerColors[1];
-        } else this.currentPlayer = this.playerColors[0];
+    // Switch player and return him.
+    switchCurrentPlayer() {
+        this.currentPlayer = (this.currentPlayer === PLAYERS[0] ? PLAYERS[1] : PLAYERS[0]);
         return this.currentPlayer;
     }
 
-    this.draw = function() {
-        let row = 0;
-        let col = 0;
+    // Drawing the board with all of it's parts: slots, discs and game ending.
+    draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        for(let i = this.boardRows-1 ; i >= 0 ; i--) {
-            for(let j=0 ; j<this.boardColumns ; j++) {
-                this.drawSlot(col, row, this.color);
-                if(i <= this.state[j].length-1) {
-                    if(this.state[j][i].marked) {
-                        this.drawSlot(col, row, this.fourRowColor);
+        for(let row = BOARD_ROWS-1 ; row >= 0 ; row--) {
+            for(let col=0 ; col<BOARD_COLS ; col++) {
+                this.drawSlot(col, row, BOARD_COLOR);
+                if(row < this.discsState[col].length) {
+                    if(this.discsState[col][row].marked) {
+                        this.drawSlot(col, row, SEQUENCE_COLOR);
                     }
-                    this.state[j][i].draw();
+                    this.discsState[col][row].draw();
                 }
-                row++;
             }
-            row=0;
-            col++;
         }
-        if (this.isWinner) {
+        if (this.gameStatus === GAME_STATUSES.win) {
             this.declareWinner();
-        } else if (this.isTie) {
+        } else if (this.gameStatus === GAME_STATUSES.tie) {
             this.declareTie();
         }
     }
 
-    this.drawSlot = function(col, row, color) {
-        let d = this.slotDim;
-        let x = row*d;
-        let y = col*d;
-
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, d, d);
-    
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath();
-        ctx.arc(x+d/2, y+d/2, d/3, 0, Math.PI*2, true);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
-    }
-
-    this.placePiece = function(color, column) { // Place one piece in the selected column bottom. If ilegal move return false otherwise return true.
-        if(!this.isLegalMove(column)) {
-            return false;
-        }
-        let i = column-1;
-        let x = (i * this.slotDim) + this.slotDim/2;
-        let y = ((this.boardRows-this.state[i].length-1) * this.slotDim) + this.slotDim/2;
-        this.state[i].push(new Disc(x, y, this.slotDim, color));
-        this.lastMoveCol = column;
-        this.movesNumber++;
-        return true;
-    }
-
-    this.isLegalMove = function(column) {
-        if(column > 0 && this.state[column-1].length < this.boardRows) {
-            return true;
-        } else return false;
-    }
-
-    this.getColByAxis = function(x, y) {
-        let col = Math.floor(x / this.slotDim) + 1;
-        let row = Math.floor(y / this.slotDim) + 1;
-        if(col > this.boardColumns || row > this.boardRows) {
-            return 0;
-        } else return col;
-    }
-
-    this.isGameTie = function() {
-        if(this.movesNumber >= this.boardColumns*this.boardRows) {
-            this.isTie=true;
-            return true;
-        } else return false;
-    }
-
-    this.isGameWinner = function() {
-        i = this.lastMoveCol-1;
-        j = this.state[this.lastMoveCol-1].length-1;
-        if(this.checkSlant(i, j) ||
-           this.checkReverseSlant(i, j) ||
-           this.checkVertical(i, j) ||
-           this.checkHorizontal(i, j)) {
-            this.isWinner = true;
-            return true;
-        } else return false;
-    }
-
-    this.checkSlant = function(i, j) {
-        while(i-1>=0 && j+1<this.state[i-1].length && this.state[i-1][j+1].color===this.currentPlayer) {
-            i--;
-            j++;
-        } 
-        if(i <= 3 && j >= 3  && this.state[i][j].color === this.currentPlayer &&
-                            j-1 < this.state[i+1].length && this.state[i+1][j-1].color === this.currentPlayer &&
-                            j-2 < this.state[i+2].length && this.state[i+2][j-2].color === this.currentPlayer &&
-                            j-3 < this.state[i+3].length && this.state[i+3][j-3].color === this.currentPlayer) {
-            this.state[i][j].marked = true;
-            this.state[i+1][j-1].marked = true;
-            this.state[i+2][j-2].marked = true;
-            this.state[i+3][j-3].marked = true;
-            return true;
-        } else return false;
-    }
-    
-    this.checkReverseSlant = function(i, j) {
-        while(i+1<this.state.length && j+1<this.state[i+1].length && this.state[i+1][j+1].color===this.currentPlayer) {
-            i++;
-            j++;
-        }
-        if(i >= 3 && j >= 3  && this.state[i][j].color === this.currentPlayer &&
-                            j-1 < this.state[i-1].length && this.state[i-1][j-1].color === this.currentPlayer &&
-                            j-2 < this.state[i-2].length && this.state[i-2][j-2].color === this.currentPlayer &&
-                            j-3 < this.state[i-3].length && this.state[i-3][j-3].color === this.currentPlayer) {
-            this.state[i][j].marked = true;
-            this.state[i-1][j-1].marked = true;
-            this.state[i-2][j-2].marked = true;
-            this.state[i-3][j-3].marked = true;
-            return true;
-        } else return false;
-    }
-
-    this.checkVertical = function(i, j) {
-        if(j >= 3  && this.state[i][j].color === this.currentPlayer &&
-                        this.state[i][j-1].color === this.currentPlayer &&
-                        this.state[i][j-2].color === this.currentPlayer &&
-                        this.state[i][j-3].color === this.currentPlayer) {
-            this.state[i][j].marked = true;
-            this.state[i][j-1].marked = true;
-            this.state[i][j-2].marked = true;
-            this.state[i][j-3].marked = true;
-            return true;
-        } else return false;
-    }
-
-    this.checkHorizontal = function(i, j) {
-        while(i-1>=0 && j<this.state[i-1].length && this.state[i-1][j].color===this.currentPlayer) {
-            i--;
-        }
-        if(i <= 3 && this.state[i][j].color === this.currentPlayer &&
-                    j < this.state[i+1].length && this.state[i+1][j].color === this.currentPlayer &&
-                    j < this.state[i+2].length && this.state[i+2][j].color === this.currentPlayer &&
-                    j < this.state[i+3].length && this.state[i+3][j].color === this.currentPlayer) {
-            this.state[i][j].marked = true;
-            this.state[i+1][j].marked = true;
-            this.state[i+2][j].marked = true;
-            this.state[i+3][j].marked = true;
-            return true;
-        } else return false;
-    }
-
-    this.declareWinner = function() {
+    // Draw the text for the winner.
+    declareWinner() {
         ctx.font = '900 ' + canvas.height/3 + 'px Arial';
-        ctx.fillStyle = this.currentPlayer;
-        ctx.fillText(this.currentPlayer, 10, canvas.height/3);
+        ctx.fillStyle = this.currentPlayer.color;
+        ctx.fillText(this.currentPlayer.color, 10, canvas.height/3);
 
         ctx.fillStyle = 'pink';
         ctx.fillText('won!', 10, canvas.height-50);
     }
 
-    this.declareTie = function() {
+    // Draw the text for tie.
+    declareTie() {
         ctx.font = '900 ' + canvas.height/3.6 + 'px Arial';
         ctx.fillStyle = 'rosyBrown';
         ctx.fillText('It\'s a tie!', 10, canvas.height/1.7);
     }
+
+    // Determine if there is disc at cell. Return boolean.
+    isDiscInSlot(col, row) {
+        return (col >= 0 && col <BOARD_COLS && row >=0 &&row < this.discsState[col].length);
+    }
+
+    // Draw one slot (cell).
+    drawSlot(col, row, color) {
+        let axis = colRowToAxis(col, row);
+
+        ctx.fillStyle = color;
+        ctx.fillRect(axis.x, axis.y, SLOT_DIMENSION, SLOT_DIMENSION);
+    
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(axis.x+SLOT_DIMENSION/2, axis.y+SLOT_DIMENSION/2, SLOT_DIMENSION/3, 0, Math.PI*2, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Place disc on top of column. If illegal return false, otherwise: true.
+    placeDisc(color, col) {
+        if(!this.isLegalMove(col)) {
+            return false;
+        }
+        let row = this.rowOfColTopDisc(col);
+        this.discsState[col].push(new Disc(col, row, color));
+        this.lastMoveCol = col;
+        this.movesNumber++;
+        return true;
+    }
+
+    // Return the row of column top disc.
+    rowOfColTopDisc(col) {
+        return this.discsState[col].length-1;
+    }
+
+    // If move to this column is legal return true, otherwise: false.
+    isLegalMove(col) {
+        return (this.isWithinBoard(col) && this.discsState[col].length < BOARD_ROWS ? true : false);
+    }
+
+    // If column is inside the board return true. otherwise false.
+    isWithinBoard(col) {
+        return ((col >= 0 && col < BOARD_COLS && this.discsState[col].length >=0 && this.discsState[col].length <= BOARD_ROWS) ? true : false);
+    }
+
+    // Determine if tie.
+    isTie() {
+        if(this.movesNumber >= BOARD_COLS*BOARD_ROWS) {
+            this.gameStatus = GAME_STATUSES.tie;
+            return true;
+        } else return false;
+    }
+
+    // Determine if current player won.
+    isCurrentPlayerWin() {
+        let col = this.lastMoveCol;
+        let row = this.discsState[this.lastMoveCol].length-1;
+        if(this.isAnySequenceOfFour(col, row)) {
+            this.gameStatus = GAME_STATUSES.win;
+            return true;
+        } else return false;
+    }
+
+    // Watch the last placed disc, and find if it's in a sequence of four or higher.
+    isAnySequenceOfFour(col, row) {
+        let directions = [
+            NEARBY_CELL_DIRECTIONS.belowRight,
+            NEARBY_CELL_DIRECTIONS.belowLeft,
+            NEARBY_CELL_DIRECTIONS.below,
+            NEARBY_CELL_DIRECTIONS.right, ]
+        for(let index = 0 ; index < directions.length ; index++) {
+            let axis = this.getSequenceStart(col, row, directions[index]);
+            col = axis.col;
+            row = axis.row;
+            if(this.isSequenceFromStart(col, row, directions[index])) {
+                this.markSequence(col, row, directions[index]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Receiving first cell of sequence and direction.
+    // Determine if there's a row in that direction.
+    // For direction varible use 'NEARBY_CELL_DIRECTION.direction' const.
+    isSequenceFromStart(col, row, direction) {
+        let counter = 1;
+        while(this.isCellEqualNearbyCell(col, row, direction)) {
+            col+=direction.x;
+            row+=direction.y;
+            counter++;
+        }
+        return (counter >= 4 ? true : false);
+    }
+
+    // Marking discs that are in the sequence.
+    // For direction varible use 'NEARBY_CELL_DIRECTION.direction' const.
+    markSequence(col, row, direction) {
+        while(this.isCellEqualNearbyCell(col, row, direction)) {
+            this.discsState[col][row].marked = true;
+            col+=direction.x;
+            row+=direction.y;
+        }
+        this.discsState[col][row].marked = true;
+    }
+
+    // Determine if nearby cell color in the direction is equal to current player color.
+    // For direction varible use 'NEARBY_CELL_DIRECTION.direction' const.
+    isCellEqualNearbyCell(col, row, direction) {
+        if(this.isWithinBoard(col + direction.x) &&
+            this.isDiscInSlot(col + direction.x, row + direction.y) && 
+            this.discsState[col + direction.x][row + direction.y].color === this.currentPlayer.color) {
+            return true;
+        } else return false;
+    }
+
+    // Find the starting cell. (Searching in opposite direction)
+    // For direction varible use 'NEARBY_CELL_DIRECTION.direction' const.
+    getSequenceStart(col, row, direction) {
+        direction = this.reverseDirection(direction);
+        while(this.isCellEqualNearbyCell(col, row, direction)) {
+            col+=direction.x;
+            row+=direction.y;
+        }
+        return {col, row};
+    }
+
+    // Reverse the direction.
+    // For direction varible use 'NEARBY_CELL_DIRECTION.direction' const.
+    reverseDirection(direction) {
+        return {x: direction.x * -1, y: direction.y * -1};
+    }
+
 }
 
 
-function Disc(x, y, dimension, color) {
-    this.x = x;
-    this.y = y;
-    this.radius = dimension/2;
-    this.color = color;
-    this.marked = false;
+// It's Disc class.
+class Disc {
+    constructor(col, row, color) {
+        this.axis = colRowToAxis(col, row);
+        this.axis.x += SLOT_DIMENSION/2;
+        this.axis.y -= SLOT_DIMENSION/2;
+        this.radius = SLOT_DIMENSION/2;
+        this.color = color;
+        this.marked = false;
+    }
 
-    this.draw = function() {
+    // Drawing one disc by it's properties.
+    draw() {
         ctx.globalCompositeOperation = 'destination-over'
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2, false);
+        ctx.arc(this.axis.x, this.axis.y, this.radius, 0, Math.PI*2, false);
         ctx.fillStyle = this.color;
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over'
     }
+}
+
+// Convert's column and row to x y axis.
+let colRowToAxis = function(col, row) {
+    let x = Math.floor(col * SLOT_DIMENSION);
+    let y = Math.floor((BOARD_ROWS-row-1) * SLOT_DIMENSION);
+    return {x, y};
+}
+
+// Convert's x y axis to column and row.
+let axisToColRow = function(x, y) {
+    let col = Math.floor(x / SLOT_DIMENSION);
+    let row = Math.floor(y / SLOT_DIMENSION);
+    return {col, row};
 }
 
 let click = {
@@ -224,25 +268,29 @@ let click = {
     y: undefined
 }
 
-function gameClick(event) {
+// When clicking in the game.
+let gameClick = function(event) {
     click.x = event.x;
     click.y = event.y;
-    let col = board.getColByAxis(click.x, click.y);
-    if(board.placePiece(board.currentPlayer, col)) {
-        if(board.isGameWinner() || board.isGameTie()) {
+    let col = axisToColRow(click.x, click.y).col;
+    if(game.placeDisc(game.currentPlayer.color, col)) {
+        if(game.isCurrentPlayerWin() || game.isTie()) {
             canvas.removeEventListener('click', gameClick);
             canvas.addEventListener('click', play);
         }
-        board.draw();
-        board.switchCurrentPlayer();
+        game.draw();
+        game.switchCurrentPlayer();
     }
 }
 
-function play() {
+// Starting the game.
+let play = function() {
     canvas.removeEventListener('click', play)
-    board = new Board();
-    board.draw();
+    game = new Game();
+    game.draw();
     canvas.addEventListener('click', gameClick);
 }
+
+
 
 play();

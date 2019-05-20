@@ -32,8 +32,6 @@ class Game {
         this.movesNumber = 0;
         this.gameStatus = GAME_STATUSES.playing;
         this.currentPlayer = PLAYERS[0];
-        
-        
     }
     
     // Return's new disc state.
@@ -74,9 +72,9 @@ class Game {
 
     // Draw the text for the winner.
     declareWinner() {
-        ctx.font = '900 ' + canvas.height/3 + 'px Arial';
+        ctx.font = '900 ' + canvas.height/5 + 'px Arial';
         ctx.fillStyle = this.currentPlayer.color;
-        ctx.fillText(this.currentPlayer.color, 10, canvas.height/3);
+        ctx.fillText(this.currentPlayer.name, 10, canvas.height/3);
 
         ctx.fillStyle = 'pink';
         ctx.fillText('won!', 10, canvas.height-50);
